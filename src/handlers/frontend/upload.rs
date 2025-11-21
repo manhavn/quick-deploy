@@ -12,6 +12,12 @@ pub struct ResultStruct {
 
 pub async fn handler(mut multipart: Multipart) -> ResultStruct {
     let mut message = String::new();
+    tokio::fs::create_dir_all(&ENV.rust_app_frontend_upload_path)
+        .await
+        .unwrap();
+    tokio::fs::create_dir_all(&ENV.rust_app_frontend_static_path)
+        .await
+        .unwrap();
     while let Some(field) = multipart.next_field().await.unwrap() {
         let name = field.name().unwrap_or("unnamed").to_string();
         let file_name = field.file_name().unwrap_or("noname").to_string();
