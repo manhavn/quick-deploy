@@ -19,10 +19,10 @@ scp -P 22 $ENV_FOLDER/*.* $DEPLOY_HOST:$ENV_APP_CONFIG/env
 echo 'export' DOCKER_HOST="ssh://$DEPLOY_HOST:22"
 export DOCKER_HOST="ssh://$DEPLOY_HOST:22"
 
-docker stop $APP_HANDLE
-docker rm $APP_HANDLE
+docker stop "$APP_HANDLE-$PROJECT_HANDLE"
+docker rm "$APP_HANDLE-$PROJECT_HANDLE"
 
-docker run -d --name $APP_HANDLE \
+docker run -d --name "$APP_HANDLE-$PROJECT_HANDLE" \
     -p 172.17.0.1:9901:8080 \
     -v $ENV_APP_CONFIG/frontend:/frontend \
     -v $ENV_APP_CONFIG/env:/env \
