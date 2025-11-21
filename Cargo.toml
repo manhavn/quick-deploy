@@ -1,0 +1,17 @@
+[package]
+name = "quick-deploy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.7"
+serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1", features = ["full", "rt-multi-thread"] }
+axum-server = "0.7.3"
+dotenvy = "0.15.7"
+once_cell = "1.21.3"
+envy = "0.4.2"
+serde_json = "1.0.145"
+axum-extra = { version = "0.12.2", features = ["multipart"] }
+chrono = "0.4.42"
+zip = "6.0.0"
