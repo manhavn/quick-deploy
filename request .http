@@ -17,6 +17,12 @@ Content-Type: application/zip
 --boundary--
 
 ###
+#curl -X PUT http://0.0.0.0:8080/server/frontend/upload \
+#  -H "Content-Type: multipart/form-data" \
+#  -F "dist=@./dist.zip;type=application/zip"
+###
+
+###
 POST {{SERVER_URL}}/sum
 Content-Type: application/json
 
