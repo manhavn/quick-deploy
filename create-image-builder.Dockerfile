@@ -1,4 +1,4 @@
-FROM docker.io/library/rust:1.91-alpine
+FROM docker.io/library/rust:1.92-alpine
 WORKDIR /app
 
 RUN apk add musl-dev build-base

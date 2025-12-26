@@ -1,8 +1,9 @@
 use crate::env::frontend::ENV;
 use axum_extra::extract::Multipart;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
+use std::path::Path;
+use std::pin::Pin;
+use tokio::fs::{File, copy, create_dir_all, metadata, read_dir, remove_dir_all, remove_file};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader, Result};
 
 #[derive(serde::Serialize)]
 pub struct ResultStruct {
@@ -10,83 +11,77 @@ pub struct ResultStruct {
     success: bool,
 }
 
-pub async fn handler(mut multipart: Multipart) -> ResultStruct {
+pub async fn handler(mut multipart: Multipart) -> Result<ResultStruct> {
     let mut message = String::new();
-    tokio::fs::create_dir_all(&ENV.rust_app_frontend_upload_path)
-        .await
-        .unwrap();
-    tokio::fs::create_dir_all(&ENV.rust_app_frontend_static_path)
-        .await
-        .unwrap();
-    while let Some(field) = multipart.next_field().await.unwrap() {
+    create_dir_all(&ENV.rust_app_frontend_upload_path).await?;
+    create_dir_all(&ENV.rust_app_frontend_static_path).await?;
+
+    while let Ok(Some(field)) = multipart.next_field().await {
         let name = field.name().unwrap_or("unnamed").to_string();
         let file_name = field.file_name().unwrap_or("noname").to_string();
         let content_type = field.content_type().unwrap_or("").to_string();
-        let data = field.bytes().await.unwrap();
-
         if name != "dist" || content_type != "application/zip" {
             continue;
         }
+        let data = match field.bytes().await.ok() {
+            Some(b) => b,
+            None => continue,
+        };
 
         let now = chrono::Utc::now();
         let timestamp = now.format("%Y%m%d_%H%M%S_UTC");
         let new_file_name = format!("{}_{}.zip", timestamp, name);
 
         let filepath = format!("{}/{new_file_name}", ENV.rust_app_frontend_upload_path);
-        let mut file = File::create(&filepath).await.unwrap();
-        file.write_all(&data).await.unwrap();
+        let mut file = File::create(&filepath).await?;
+        file.write_all(&data).await?;
 
         {
             // Giải nén file zip vào thư mục tmp
             let tmp_dir = format!("{}/tmp", ENV.rust_app_frontend_upload_path);
-            tokio::fs::create_dir_all(&tmp_dir).await.unwrap();
+            create_dir_all(&tmp_dir).await?;
 
-            let zip_file = File::open(&filepath).await.unwrap();
-            let mut zip_reader = tokio::io::BufReader::new(zip_file);
+            let zip_file = File::open(&filepath).await?;
+            let mut zip_reader = BufReader::new(zip_file);
             let mut buffer = Vec::new();
-            zip_reader.read_to_end(&mut buffer).await.unwrap();
+            zip_reader.read_to_end(&mut buffer).await?;
 
-            let mut archive = zip::ZipArchive::new(std::io::Cursor::new(buffer)).unwrap();
+            let mut archive = zip::ZipArchive::new(std::io::Cursor::new(buffer))?;
             for i in 0..archive.len() {
-                let mut file = archive.by_index(i).unwrap();
-                let outpath = std::path::Path::new(&tmp_dir).join(file.mangled_name());
+                let mut file = archive.by_index(i)?;
+                let outpath = Path::new(&tmp_dir).join(file.mangled_name());
 
                 if file.name().ends_with('/') {
-                    tokio::fs::create_dir_all(&outpath).await.unwrap();
+                    create_dir_all(&outpath).await?;
                 } else {
                     if let Some(p) = outpath.parent() {
-                        tokio::fs::create_dir_all(p).await.unwrap();
+                        create_dir_all(p).await?;
                     }
-                    let mut outfile = File::create(&outpath).await.unwrap();
+                    let mut outfile = File::create(&outpath).await?;
                     let mut file_buf = Vec::new();
-                    std::io::copy(&mut file, &mut file_buf).unwrap();
-                    outfile.write_all(&file_buf).await.unwrap();
+                    std::io::copy(&mut file, &mut file_buf)?;
+                    outfile.write_all(&file_buf).await?;
                 }
             }
 
             // Xoá tất cả file và thư mục trong static_path
             let static_path = &ENV.rust_app_frontend_static_path;
-            if tokio::fs::metadata(static_path).await.is_ok() {
-                let mut entries = tokio::fs::read_dir(static_path).await.unwrap();
-                while let Some(entry) = entries.next_entry().await.unwrap() {
+            if metadata(static_path).await.is_ok() {
+                let mut entries = read_dir(static_path).await?;
+                while let Some(entry) = entries.next_entry().await? {
                     let path = entry.path();
                     if path.is_dir() {
-                        tokio::fs::remove_dir_all(&path).await.unwrap();
+                        remove_dir_all(&path).await?;
                     } else {
-                        tokio::fs::remove_file(&path).await.unwrap();
+                        remove_file(&path).await?;
                     }
                 }
             }
 
-            copy_dir_all(
-                std::path::Path::new(&tmp_dir),
-                std::path::Path::new(static_path),
-            )
-            .await
-            .unwrap();
+            copy_dir_all(Path::new(&tmp_dir), Path::new(static_path)).await?;
 
             // Xoá tmp
-            tokio::fs::remove_dir_all(&tmp_dir).await.unwrap();
+            remove_dir_all(&tmp_dir).await?;
         }
 
         message.push_str(&format!(
@@ -96,20 +91,20 @@ pub async fn handler(mut multipart: Multipart) -> ResultStruct {
         ));
     }
 
-    ResultStruct {
-        message: message,
+    Ok(ResultStruct {
+        message,
         success: true,
-    }
+    })
 }
 
 // Copy toàn bộ file và thư mục từ tmp sang static_path
 fn copy_dir_all<'a>(
-    src: &'a std::path::Path,
-    dst: &'a std::path::Path,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<()>> + Send + 'a>> {
+    src: &'a Path,
+    dst: &'a Path,
+) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
     Box::pin(async move {
-        tokio::fs::create_dir_all(dst).await?;
-        let mut entries = tokio::fs::read_dir(src).await?;
+        create_dir_all(dst).await?;
+        let mut entries = read_dir(src).await?;
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             let file_type = entry.file_type().await?;
@@ -117,7 +112,7 @@ fn copy_dir_all<'a>(
             if file_type.is_dir() {
                 copy_dir_all(&path, &dest_path).await?;
             } else {
-                tokio::fs::copy(&path, &dest_path).await?;
+                copy(&path, &dest_path).await?;
             }
         }
         Ok(())

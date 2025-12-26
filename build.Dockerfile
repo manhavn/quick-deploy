@@ -1,4 +1,4 @@
-FROM localhost/rust-musl/builder:1.91-alpine AS builder
+FROM localhost/rust-musl/builder:1.92-alpine AS builder
 WORKDIR /app
 
 #RUN apk add musl-dev build-base

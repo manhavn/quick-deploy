@@ -21,6 +21,7 @@ export DOCKER_HOST="ssh://$DEPLOY_HOST:22"
 
 docker stop "$APP_HANDLE-$PROJECT_HANDLE"
 docker rm "$APP_HANDLE-$PROJECT_HANDLE"
+docker rmi $IMAGE_NAME
 
 docker run -d --name "$APP_HANDLE-$PROJECT_HANDLE" \
     -p 172.17.0.1:9901:8080 \
