@@ -1,0 +1,34 @@
+@SERVER_URL=http://0.0.0.0:8080
+# @SERVER_URL=http://0.0.0.0:8000
+# @SERVER_URL=http://172.17.0.1:8000
+
+###
+GET {{SERVER_URL}}
+
+###
+PUT {{SERVER_URL}}/server/frontend/upload
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="dist"; filename="dist.zip"
+Content-Type: application/zip
+
+< ./dist.zip
+--boundary--
+
+###
+#curl -X PUT http://0.0.0.0:8080/server/frontend/upload \
+#  -H "Content-Type: multipart/form-data" \
+#  -F "dist=@./dist.zip;type=application/zip"
+###
+
+###
+POST {{SERVER_URL}}/sum
+Content-Type: application/json
+
+{
+  "a": 5,
+  "b": 10
+}
+
+###
